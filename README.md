@@ -85,7 +85,7 @@ Coverage analysis
 
             for i in $(ls *RG.bam); do echo $i; /home/imateus/software/bedtools2/bin/bedtools genomecov -ibam $i -d -split > $(echo $i | cut -d'_' -f1,6)_detail.txt ; done
 
-- Zip new coverage file (big files)
+     - Zip new coverage file (big files)
             
             for i in $(ls *detail.txt); do echo $i ; gzip $i ;done
 
