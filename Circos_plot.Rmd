@@ -1,0 +1,202 @@
+---
+title: "Circos Plot with different info in tracks"
+author: "IM"
+date: "June 8, 2018"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy.opts=list(width.cutoff=65),tidy=TRUE,fig.pos = "!h")
+```
+
+## Circular genome-wide representation
+
+A good genome representation could help to understand the genome organisation of bacterial genomes. Circular plots could allow to visualize on the same figure different properties of a genome. This can be achieved by ploting different information in different tracks of a circular plot. 
+
+In this example, we visualiize an horizontal gene transfer event that happened between two strains of the same especies.
+
+
+This data is based in an experiment where two strains of the same especies were putted together. We then isolate one of the strains and sequence it. The rationale of the experiment is to detect if the isolated bacteria contained parts of the other bacteria in its genome (horizontal gene transfer).
+
+
+## Add libraries
+```{r}
+library(pheatmap)
+library(GenomicRanges)
+library(ggbio)
+library(ggplot2)
+library("ggtree")
+library(circlize)
+```
+
+
+## Information to include in different tracks
+We then analyse independantly certain features of the strain sequenced.
+
+### Reference template length
+We constructed a chimera template based on the genome assembly of the two initial strains (template strain1 + template strain 2)
+we then stablish the length of the chimera
+```{r}
+templat = data.frame(name = c("template"),start = c(1),end= c(8057838))
+head(templat)
+```
+
+### Representation of the structure of the reference template
+Because each strain contain 2 chromosomes, we decide to bisualize the different chromosomes of each strain in the chimera (strain 1 blue, strain 2 green). Dark colors represent chromosome I and light colors represent chromosome II.
+```{r}
+chrom= data.frame(name = c("template","template","template","template","template","template"),
+                  start = c(1,2995339,4019277,6960891,7075966,7077442),
+                  end= c(2995338,4019276,6960890,7075965,7077441,8057838),
+                  value=c(1,0,1,0,1,0))
+head(chrom)
+```
+
+### Coding sequences
+We annotated the chimera, and obtained a gff file. This file contain the information of position of the coding sequences on the chimera.
+We then imported the raw gff  format and decomposed to obtain a simplified table of the gff.
+```{r}
+template<-read.delim("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/All_chromosomes-Sa5Y-VCA0107-frt-kan-frt.gff",h=F,sep="\t")
+template2<-template[grep("cds",template$V3),c(1,4,5,7,9)]
+template3<-strsplit(as.character(template2$V9),';')
+template3<-lapply(template3,function (x) x[grep("locus_tag",x)])
+template3<-lapply(template3,function (x) gsub("locus_tag=","",x))
+template3<-unlist(lapply(template3,function (x) ifelse (length(x) == 0, "NA", x)))
+template4<-cbind.data.frame(template2[,c(1:4)],template3)
+colnames(template4)<-c("chr","start","end","strand","id")
+
+CDS<-cbind.data.frame(rep("template",length(template4$chr)),template4[,c(2,3,4)])
+head(CDS)
+```
+
+### Coverage per site
+We analysed the coverage per site of the sequenced strain. After triming the raw reads, aligned them to the reference chimera, we were able to measure the coverage per site. This information was imported on R and summarized in the object covo.
+```{r}
+cov1<-read.delim("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/4703_detail.txt", h=F,sep = "\t")
+colnames(cov1)<-c("chr","start","cov")
+covo<-cbind.data.frame(chr=rep("template",length=dim(cov1)[1]),cov1[,c(2,3)])
+covo<-covo[covo$cov>10,]
+head(covo)
+```
+
+### Confirmed HGT event
+We developped an algorythm to detect 'gaps' (missing reads) in first part of the chimera and 'islands' (presence of reads) on the second part of the chimera. 
+this allowed us to detect True HGT events that are confirmed by measuring a 'gap' and an 'island' in the chimera
+```{r}
+ConfirmedCov<-read.delim("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/4703_Confirmed_10kbthreshold_VF.txt", h=T,sep = "\t")
+ConfirmedCov2<-cbind.data.frame(chr=rep("template",length=dim(ConfirmedCov)[1]),ConfirmedCov[,c(2,3)])
+final_Confirmed2<- cbind.data.frame(chrom=rep("template",2),start=ConfirmedCov2[,2],end=ConfirmedCov2[,3],strand=rep("+",2))
+head(final_Confirmed2)
+```
+
+### SNP mapped to Chimera
+We also measured the nb of SNP between the strain and both parts of the chimera. the result in VCF format was simplified to be ploted.
+```{r}
+tmp.vcf<-readLines("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/4703_S6_R1_Trimm_Pair_sortedQ30RG.vcf")
+tmp.vcf.data<-read.table("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/4703_S6_R1_Trimm_Pair_sortedQ30RG.vcf")
+# filter for the columns names
+tmp.vcf<-tmp.vcf[-(grep("#CHROM",tmp.vcf)+1):-(length(tmp.vcf))]
+vcf.names<-unlist(strsplit(tmp.vcf[length(tmp.vcf)],"\t"))
+names(tmp.vcf.data)<-vcf.names
+tmp.vcf.data<-tmp.vcf.data[grep("snp",tmp.vcf.data$INFO),1:5]
+SNpss<-cbind.data.frame(rep("template",length(tmp.vcf.data$POS)),tmp.vcf.data$POS, tmp.vcf.data$POS +1, rep("+", length(tmp.vcf.data$POS)))
+head(SNpss)
+```
+
+### SNP mapped strain 1 to strain 2
+We calculated the SNP between the strain 1 (Reference) and strain 2. We obtained a VCF file that was simplified in order to be plotted.
+```{r}
+tmp.vcf<-readLines("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/Sa5Y_in_A1552.vcf")
+tmp.vcf.data2<-read.table("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/Sa5Y_in_A1552.vcf")
+# filter for the columns names
+tmp.vcf<-tmp.vcf[-(grep("#CHROM",tmp.vcf)+1):-(length(tmp.vcf))]
+vcf.names<-unlist(strsplit(tmp.vcf[length(tmp.vcf)],"\t"))
+names(tmp.vcf.data2)<-vcf.names
+tmp.vcf.data2<-tmp.vcf.data2[grep("snp",tmp.vcf.data2$INFO),1:5]
+tmp.vcf.data2$POS[tmp.vcf.data2$`#CHROM`=="A1552-chr2"]<-tmp.vcf.data2$POS[tmp.vcf.data2$`#CHROM`=="A1552-chr2"] + 2995338
+SNpss2<-cbind.data.frame(rep("template",length(tmp.vcf.data2$POS)),tmp.vcf.data2$POS, tmp.vcf.data2$POS +1, rep("+", length(tmp.vcf.data2$POS)))
+head(SNpss2)
+```
+
+### SNP mapped strain 2 to strain 1
+We calculated the SNP between the strain 1  and strain 2 (Reference). We obtained a VCF file that was simplified in order to be plotted.
+```{r}
+tmp.vcf<-readLines("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/A1552_in_Sa5Y.vcf")
+tmp.vcf.data2<-read.table("~/Documents/Noemie/NoemiePaper_VF/Coverage_plot/A1552_in_Sa5Y.vcf")
+# filter for the columns names
+tmp.vcf<-tmp.vcf[-(grep("#CHROM",tmp.vcf)+1):-(length(tmp.vcf))]
+vcf.names<-unlist(strsplit(tmp.vcf[length(tmp.vcf)],"\t"))
+names(tmp.vcf.data2)<-vcf.names
+tmp.vcf.data2<-tmp.vcf.data2[grep("snp",tmp.vcf.data2$INFO),1:5]
+tmp.vcf.data2$POS[tmp.vcf.data2$`#CHROM`=="Sa5Y-chr1"]<-tmp.vcf.data2$POS[tmp.vcf.data2$`#CHROM`=="Sa5Y-chr1"] + 4019276
+tmp.vcf.data2$POS[tmp.vcf.data2$`#CHROM`=="Sa5Y-chr2"]<-tmp.vcf.data2$POS[tmp.vcf.data2$`#CHROM`=="Sa5Y-chr2"] + 6960890
+SNpss3<-cbind.data.frame(rep("template",length(tmp.vcf.data2$POS)),tmp.vcf.data2$POS, tmp.vcf.data2$POS +1, rep("+", length(tmp.vcf.data2$POS)))
+head(SNpss3)
+
+```
+
+
+
+
+## Circular plot
+These are the commands necessary to make the circos plot
+```{r,fig.cap="Circular representation of a two strains mapped to a composite chimera",out.extra = '',fig.pos="h", fig.align="center"}
+### Iniitalize with template
+circos.genomicInitialize(templat)
+
+### configure tracks
+circos.par("track.height" = 0.05)
+
+### chromosomes tracks
+circos.genomicTrackPlotRegion(chrom, ylim =c(0, 1),
+                              panel.fun =function(region, value, ...) {
+                                i =getI(...)
+                                circos.genomicRect(region, value, ytop = i + 0.1  , ybottom = i - 1.1 ,
+                                                   col =c("royalblue4", "royalblue","palegreen4","palegreen","Black","palegreen"), ...)
+                              })
+
+### CODING SEQUENCES
+circos.genomicTrackPlotRegion(CDS, ylim =c(0, 1),
+                              panel.fun =function(region, value, ...) {
+                                i =getI(...)
+                                circos.genomicRect(region, value, ytop = i + 0.3  , ybottom = i - 1.3 , 
+                                                   col= "lightblue4" ,...)
+                              })
+
+### SNP's
+circos.genomicTrackPlotRegion(SNpss2, ylim =c(0, 1),
+                              panel.fun =function(region, value, ...) {
+                                i =getI(...)
+                                circos.genomicRect(region, value, ytop = i + 0.3  , ybottom = i - 1.3 , 
+                                                   col= "lightblue4" ,...)
+                              })
+
+circos.genomicTrackPlotRegion(SNpss3, ylim =c(0, 1),
+                              panel.fun =function(region, value, ...) {
+                                i =getI(...)
+                                circos.genomicRect(region, value, ytop = i + 0.3  , ybottom = i - 1.3 , 
+                                                   col= "lightblue4" ,...)
+                              })
+
+### COVERAGE TRACKs
+circos.trackPlotRegion(factors = covo$chr, y = covo$cov,panel.fun =function(x, y) {   })
+circos.trackPoints(covo$chr, covo$start, covo$cov, col = "black", pch = 16, cex = 0.4)
+
+
+
+### Confirmeed COVERAGE TRACK
+circos.genomicTrackPlotRegion(final_Confirmed2, ylim =c(0, 1),
+                              panel.fun =function(region, value, ...) {
+                                i =getI(...)
+                                circos.genomicRect(region, value, ytop = i + 0.3  , ybottom = i - 1.3 , 
+                                                   col= "lightblue4" ,...)
+                              })
+
+```
+
+
+We can visualize different features on the circular plot on a different tracks. However, it can also be used to compare different genomes.
+
+In this case, we observe that based on the coverage of the sequencing reads, a region is not mapping on the first part of the template (light green), and that there are reads mapping to the equivalent region in the second part of the template (figure 1). Based on the coverage, we evidenced a big horizontal gene transfer event occured in the chromosome II. 
+
