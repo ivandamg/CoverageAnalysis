@@ -92,3 +92,8 @@ Coverage analysis
      - SNP calling 
 
             a=0; for i in $(ls *_Trimm_Pair_sortedQ30RG.bam); do echo $i;a=$((a + 1)); freebayes -f /home/imateus/Documents/V_cholerae/test1/ref_VCA0107/reference_template/All_chromosomes-Sa5Y-VCA0107-frt-kan-frt.fasta --min-coverage 10 -F 0.3 -p 1 -K -u -v $(echo $i | cut -d'.' -f1)'.vcf' -b $i ; done
+            
+- Visualize genomes with a circular plot
+
+  Rmarkdown document that explain steps of the visualization of genomic features in a circular plot. Circos_plot.Rmd Circos_plot.pdf
+
